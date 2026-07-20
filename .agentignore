@@ -1,0 +1,21 @@
+# Keep coding agents out of secrets, sessions, generated artifacts and vendored
+# deps. Mirror this to .cursorignore / .aiexclude if you use those tools.
+
+# Secrets & sessions
+.env
+.env.*
+!.env.example
+*storage_state*.json
+
+# Caches & build output
+.cache/
+.venv/
+dist/
+build/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+
+# Lockfile (large, machine-generated)
+uv.lock

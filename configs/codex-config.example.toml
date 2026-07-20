@@ -1,0 +1,20 @@
+# Merge into ~/.codex/config.toml. Same stdio servers as Claude Code.
+# Launch Codex with the secret in its environment (e.g. `op run -- codex`, or
+# export EXA_API_KEY) — the MCP server inherits it. If config.toml doesn't
+# expand ${VAR} on your Codex version, drop the env line entirely and rely on
+# the inherited environment from `op run`.
+
+[mcp_servers.exa]
+command = "npx"
+args = ["-y", "exa-mcp-server"]
+env = { EXA_API_KEY = "${EXA_API_KEY}" }
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest"]
+
+# Optional managed clean-content engine.
+[mcp_servers.firecrawl]
+command = "npx"
+args = ["-y", "firecrawl-mcp"]
+env = { FIRECRAWL_API_KEY = "${FIRECRAWL_API_KEY}" }

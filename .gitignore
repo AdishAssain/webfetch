@@ -1,0 +1,28 @@
+# Secrets & sessions — never commit
+.env
+.env.*
+!.env.example
+*storage_state*.json
+
+# Cache
+.cache/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+dist/
+build/
+*.egg-info/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.mypy_cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/

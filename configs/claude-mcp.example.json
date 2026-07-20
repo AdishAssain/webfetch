@@ -1,0 +1,19 @@
+{
+  "_comment": "Merge mcpServers into ~/.claude.json (user scope = all projects), or run scripts/setup.sh. Values use ${VAR} expansion — launch Claude Code with the secret in its environment (e.g. `op run -- claude`, or export it in your shell) so no key is stored in plaintext.",
+  "mcpServers": {
+    "exa": {
+      "command": "npx",
+      "args": ["-y", "exa-mcp-server"],
+      "env": { "EXA_API_KEY": "${EXA_API_KEY}" }
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"]
+    },
+    "firecrawl": {
+      "command": "npx",
+      "args": ["-y", "firecrawl-mcp"],
+      "env": { "FIRECRAWL_API_KEY": "${FIRECRAWL_API_KEY}" }
+    }
+  }
+}

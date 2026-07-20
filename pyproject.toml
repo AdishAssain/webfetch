@@ -1,0 +1,45 @@
+[project]
+name = "webfetch"
+version = "0.1.0"
+description = "Tiered web fetch + discovery toolkit for data-science scraping: httpx -> Playwright, with search and auth-session reuse."
+requires-python = ">=3.10"
+dependencies = [
+    "httpx>=0.27",
+    "selectolax>=0.3.21",
+    "lxml>=5.0",
+    "pandas>=2.0",
+    "openpyxl>=3.1",
+    "playwright>=1.44",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+parquet = ["pyarrow>=15.0"]
+
+[project.scripts]
+webfetch = "webfetch.__main__:main"
+
+[dependency-groups]
+dev = ["ruff>=0.6", "pytest>=8", "hypothesis>=6", "vulture>=2"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["webfetch"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.vulture]
+paths = ["webfetch"]
+min_confidence = 80
