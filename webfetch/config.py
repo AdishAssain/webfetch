@@ -24,6 +24,10 @@ def _int(name: str, default: int) -> int:
     return int(os.getenv(name, str(default)))
 
 
+def _float(name: str, default: float) -> float:
+    return float(os.getenv(name, str(default)))
+
+
 # Paths & cache
 CACHE_DIR = Path(os.getenv("WEBFETCH_CACHE_DIR", "~/.cache/webfetch")).expanduser()
 STATE_PATH = Path(os.getenv("WEBFETCH_STATE", "~/.config/webfetch/storage_state.json")).expanduser()
@@ -40,6 +44,18 @@ USER_AGENT = os.getenv(
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/125.0 Safari/537.36",
 )
+
+# Rate limiting & retries
+MAX_RETRIES = _int("WEBFETCH_MAX_RETRIES", 3)
+RETRY_BACKOFF = _float("WEBFETCH_RETRY_BACKOFF", 0.5)
+MIN_INTERVAL = _float("WEBFETCH_MIN_INTERVAL", 0.0)
+
+# Proxy / IP masking. WEBFETCH_PROXY: single proxy (point at a rotating-gateway
+# provider for rotation). WEBFETCH_PROXIES: comma-separated pool, rotated per request.
+PROXY = os.getenv("WEBFETCH_PROXY") or None
+PROXIES = [p.strip() for p in os.getenv("WEBFETCH_PROXIES", "").split(",") if p.strip()]
+# Route only these hosts (+ subdomains) through the proxy; others go direct.
+PROXY_HOSTS = [h.strip() for h in os.getenv("WEBFETCH_PROXY_HOSTS", "").split(",") if h.strip()]
 
 # API endpoints (override to point at a proxy or a mock)
 EXA_SEARCH_URL = os.getenv("EXA_SEARCH_URL", "https://api.exa.ai/search")

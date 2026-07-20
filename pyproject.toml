@@ -15,6 +15,7 @@ dependencies = [
 
 [project.optional-dependencies]
 parquet = ["pyarrow>=15.0"]
+socks = ["httpx[socks]>=0.27,<0.29"]  # SOCKS proxies (e.g. an ssh -D tunnel)
 
 [project.scripts]
 webfetch = "webfetch.__main__:main"

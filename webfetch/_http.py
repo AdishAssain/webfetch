@@ -1,9 +1,27 @@
 from __future__ import annotations
 
+import time
+
 import httpx
 
 from ._safeurl import guard, resolve_public
-from .config import ALLOW_PRIVATE, MAX_BYTES, MAX_REDIRECTS, USER_AGENT
+from .config import (
+    ALLOW_PRIVATE,
+    MAX_BYTES,
+    MAX_REDIRECTS,
+    MAX_RETRIES,
+    MIN_INTERVAL,
+    PROXIES,
+    PROXY,
+    PROXY_HOSTS,
+    RETRY_BACKOFF,
+    USER_AGENT,
+)
+
+RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
+
+_last_seen: dict[str, float] = {}
+_proxy_index = 0
 
 
 class ResponseTooLargeError(Exception):
@@ -44,24 +62,66 @@ def _guard_request(request: httpx.Request) -> None:
     guard(str(request.url), allow_private=ALLOW_PRIVATE)
 
 
-def _guarded_transport() -> httpx.BaseTransport:
-    """Transport that (1) connects only to the IP the guard validated — reusing
-    that resolution closes the DNS-rebinding gap between check and connect — and
-    (2) caps the bytes read from the socket. Fails closed: raises if it can't be
-    installed, so the SSRF/size controls never silently degrade."""
-    transport = httpx.HTTPTransport()
+def throttle(host: str | None) -> None:
+    """Enforce a minimum interval between requests to the same host (politeness)."""
+    if MIN_INTERVAL <= 0 or not host:
+        return
+    wait = MIN_INTERVAL - (time.monotonic() - _last_seen.get(host, 0.0))
+    if wait > 0:
+        time.sleep(wait)
+    _last_seen[host] = time.monotonic()
+
+
+def _retry_delay(resp: httpx.Response, attempt: int) -> float:
+    retry_after = resp.headers.get("retry-after")
+    if retry_after:
+        try:
+            return float(retry_after)
+        except ValueError:
+            pass
+    return RETRY_BACKOFF * (2**attempt)
+
+
+def backoff(resp: httpx.Response, attempt: int) -> None:
+    time.sleep(_retry_delay(resp, attempt))
+
+
+def _host_matches(host: str | None, suffixes: list[str]) -> bool:
+    return bool(host) and any(host == s or host.endswith(f".{s}") for s in suffixes)
+
+
+def _select_proxy(host: str | None = None) -> str | None:
+    """The proxy for this host, or None. With WEBFETCH_PROXY_HOSTS set, only
+    matching hosts are proxied (others go direct) — 'only if required' routing."""
+    global _proxy_index
+    if PROXY_HOSTS and not _host_matches(host, PROXY_HOSTS):
+        return None
+    if PROXIES:
+        proxy = PROXIES[_proxy_index % len(PROXIES)]
+        _proxy_index += 1
+        return proxy
+    return PROXY
+
+
+def _guarded_transport(proxy: str | None) -> httpx.BaseTransport:
+    """Transport that caps socket reads and — with no proxy — connects only to the
+    guard-validated IP, closing the DNS-rebinding gap. With a proxy the connection
+    targets the trusted proxy, so the destination is guarded at the URL level (the
+    event hook) rather than IP-pinned. Fails closed: raises if it can't install."""
+    transport = httpx.HTTPTransport(proxy=proxy)
     try:
         base_backend = type(transport._pool._network_backend)
     except AttributeError as exc:
         raise RuntimeError(
             "cannot install the SSRF-guarded transport (unsupported httpx/httpcore)"
         ) from exc
+    pin = proxy is None
 
     class _GuardedBackend(base_backend):
         def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
-            ip = resolve_public(host, allow_private=ALLOW_PRIVATE)
+            target = resolve_public(host, allow_private=ALLOW_PRIVATE) if pin else host
             stream = super().connect_tcp(
-                ip,
+                target,
                 port,
                 timeout=timeout,
                 local_address=local_address,
@@ -73,12 +133,11 @@ def _guarded_transport() -> httpx.BaseTransport:
     return transport
 
 
-def client(timeout: float, transport: httpx.BaseTransport | None = None) -> httpx.Client:
-    """An httpx client that SSRF-guards every request (redirects included) at the
-    URL level, and pins connections to the validated IP + caps reads at the
-    socket level."""
+def client(
+    timeout: float, transport: httpx.BaseTransport | None = None, host: str | None = None
+) -> httpx.Client:
     if transport is None:
-        transport = _guarded_transport()
+        transport = _guarded_transport(_select_proxy(host))
     return httpx.Client(
         headers={"User-Agent": USER_AGENT},
         follow_redirects=True,
@@ -90,5 +149,15 @@ def client(timeout: float, transport: httpx.BaseTransport | None = None) -> http
 
 
 def get(url: str, timeout: float = 30.0) -> httpx.Response:
-    with client(timeout) as http:
-        return http.get(url)
+    """GET with per-host throttling and retry+backoff on 429/5xx. Each attempt
+    uses a fresh client, so a rotating proxy pool changes exit IP on retry."""
+    host = httpx.URL(url).host
+    resp = None
+    for attempt in range(MAX_RETRIES + 1):
+        throttle(host)
+        with client(timeout, host=host) as http:
+            resp = http.get(url)
+        if resp.status_code not in RETRY_STATUS or attempt >= MAX_RETRIES:
+            break
+        backoff(resp, attempt)
+    return resp

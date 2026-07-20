@@ -76,7 +76,8 @@ def read_tables(url: str, **kwargs) -> list[pd.DataFrame]:
 def download(
     url: str, dest: str | Path, *, timeout: float = 60.0, max_bytes: int = MAX_BYTES
 ) -> Path:
-    """Stream a URL to disk (SSRF-guarded by the shared client) with a size cap.
+    """Stream a URL to disk (SSRF-guarded) with a size cap, per-host throttling,
+    and retry+backoff on 429/5xx.
 
     Writes to a temp file and renames on success, so a failed or oversized
     download never leaves a truncated file at dest.
@@ -84,18 +85,24 @@ def download(
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_name(dest.name + ".part")
+    host = urlparse(url).hostname
     try:
-        with _http.client(timeout) as http, http.stream("GET", url) as resp:
-            resp.raise_for_status()
-            total = 0
-            with open(tmp, "wb") as fh:
-                for chunk in resp.iter_bytes():
-                    total += len(chunk)
-                    if total > max_bytes:
-                        raise ValueError(f"download exceeds {max_bytes} bytes")
-                    fh.write(chunk)
-        tmp.replace(dest)
-        return dest
+        for attempt in range(_http.MAX_RETRIES + 1):
+            _http.throttle(host)
+            with _http.client(timeout, host=host) as http, http.stream("GET", url) as resp:
+                if resp.status_code in _http.RETRY_STATUS and attempt < _http.MAX_RETRIES:
+                    _http.backoff(resp, attempt)
+                    continue
+                resp.raise_for_status()
+                total = 0
+                with open(tmp, "wb") as fh:
+                    for chunk in resp.iter_bytes():
+                        total += len(chunk)
+                        if total > max_bytes:
+                            raise ValueError(f"download exceeds {max_bytes} bytes")
+                        fh.write(chunk)
+            tmp.replace(dest)
+            return dest
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise

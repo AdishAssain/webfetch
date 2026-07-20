@@ -16,7 +16,9 @@ def http_transport(monkeypatch):
         monkeypatch.setattr(
             h,
             "client",
-            lambda timeout=30.0: real(timeout, transport=httpx.MockTransport(handler)),
+            lambda timeout=30.0, host=None: real(
+                timeout, transport=httpx.MockTransport(handler), host=host
+            ),
         )
 
     return install

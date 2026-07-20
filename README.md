@@ -121,6 +121,37 @@ uv run pytest                                      # tests
 Install the git hooks once — `uvx pre-commit install` — to run ruff + vulture on
 every commit and pytest on push. CI runs the same chain on every push and PR.
 
+## Rate limiting & proxies
+
+All off/default via env — set only what you need:
+
+- `WEBFETCH_MIN_INTERVAL=1.0` — minimum seconds between requests to the same host
+  (politeness; default 0 = off).
+- Retries with exponential backoff on `429`/`5xx` are **on by default**
+  (`WEBFETCH_MAX_RETRIES=3`, `WEBFETCH_RETRY_BACKOFF=0.5`); `Retry-After` is honored.
+
+Proxies / IP masking (both the HTTP and Playwright paths use them):
+
+- `WEBFETCH_PROXY=http://user:pass@host:port` — route everything through one proxy.
+  **For rotating IPs, point this at a rotating-gateway provider** — the provider
+  rotates the exit IP per request, which is the simplest and most reliable method.
+- `WEBFETCH_PROXIES=http://p1:port,http://p2:port` — a pool rotated round-robin per
+  request (and per retry), for when you hold a list of static proxies.
+- `WEBFETCH_PROXY_HOSTS=data.gov.in,nikshay.in` — route **only** these hosts (and
+  their subdomains) through the proxy; everything else goes direct. This is the
+  "only if required" switch.
+
+**Region-locked sites (e.g. India-only):** point `WEBFETCH_PROXY` at a proxy whose
+exit IP is in the right country, and scope it with `WEBFETCH_PROXY_HOSTS` so only
+those sites use it. Get an in-country exit from either a residential provider with
+country targeting (Bright Data / Oxylabs / SOAX / IPRoyal, `country=IN`) or your own
+box — e.g. an AWS Mumbai (`ap-south-1`) instance running a small HTTP proxy, or an
+`ssh -D 1080 mumbai-box` SOCKS tunnel (`WEBFETCH_PROXY=socks5://localhost:1080`,
+`uv sync --extra socks`).
+
+With a proxy set, the destination is guarded at the URL level (the proxy resolves
+it, so it isn't IP-pinned like the direct path).
+
 ## Security
 
 - **SSRF-guarded fetches:** only `http`/`https`; blocks private, loopback,

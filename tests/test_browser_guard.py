@@ -23,3 +23,21 @@ def test_blocks_private_ranges_and_bad_schemes(url):
 @pytest.mark.parametrize("url", ["https://1.1.1.1/page", "http://8.8.8.8/x"])
 def test_allows_public(url):
     assert _allowed(url) is True
+
+
+def test_pw_proxy_parses_auth(monkeypatch):
+    import webfetch._browser as b
+
+    monkeypatch.setattr(b, "_select_proxy", lambda host=None: "http://user:pass@host:8080")
+    assert b._pw_proxy() == {
+        "server": "http://host:8080",
+        "username": "user",
+        "password": "pass",
+    }
+
+
+def test_pw_proxy_none_when_unset(monkeypatch):
+    import webfetch._browser as b
+
+    monkeypatch.setattr(b, "_select_proxy", lambda host=None: None)
+    assert b._pw_proxy() is None

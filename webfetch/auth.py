@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlsplit
 
-from ._browser import guarded_context
+from ._browser import _pw_proxy, guarded_context
 from ._safeurl import guard
 from .config import ALLOW_PRIVATE, STATE_PATH, USER_AGENT
 
@@ -20,7 +21,9 @@ def login(url: str, state_path: Path | str = STATE_PATH) -> Path:
     state_path.parent.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
-        context = browser.new_context(user_agent=USER_AGENT)
+        context = browser.new_context(
+            user_agent=USER_AGENT, proxy=_pw_proxy(urlsplit(url).hostname)
+        )
         if not ALLOW_PRIVATE:
             guarded_context(context)  # same per-request guard as render()
         context.new_page().goto(url)
