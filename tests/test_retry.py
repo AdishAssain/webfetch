@@ -79,3 +79,13 @@ def test_proxy_only_for_matching_hosts(monkeypatch):
     assert _http._select_proxy("gov.in") == "http://p"  # exact
     assert _http._select_proxy("example.com") is None  # unmatched -> direct
     assert _http._select_proxy(None) is None
+
+
+def test_host_matches_boundaries():
+    assert _http._host_matches("data.gov.in", ["gov.in"]) is True
+    assert _http._host_matches("gov.in", ["gov.in"]) is True
+    assert _http._host_matches("evilgov.in", ["gov.in"]) is False  # not a suffix boundary
+    assert _http._host_matches("GOV.IN", ["gov.in"]) is True  # case-insensitive
+    assert _http._host_matches("data.gov.in.", ["gov.in"]) is True  # trailing dot
+    assert _http._host_matches("data.gov.in", ["GOV.IN."]) is True  # suffix normalized too
+    assert _http._host_matches(None, ["gov.in"]) is False

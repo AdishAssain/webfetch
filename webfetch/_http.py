@@ -87,7 +87,11 @@ def backoff(resp: httpx.Response, attempt: int) -> None:
 
 
 def _host_matches(host: str | None, suffixes: list[str]) -> bool:
-    return bool(host) and any(host == s or host.endswith(f".{s}") for s in suffixes)
+    if not host:
+        return False
+    host = host.lower().rstrip(".")
+    normalized = (s.lower().rstrip(".") for s in suffixes)
+    return any(host == s or host.endswith(f".{s}") for s in normalized)
 
 
 def _select_proxy(host: str | None = None) -> str | None:

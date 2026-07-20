@@ -8,7 +8,8 @@ from urllib.parse import urlparse
 import pandas as pd
 
 from . import _browser, _extract, _firecrawl, _http, cache
-from .config import ENGINE, FIRECRAWL_API_KEY, MAX_BYTES, MIN_TEXT_CHARS
+from ._safeurl import guard
+from .config import ALLOW_PRIVATE, ENGINE, FIRECRAWL_API_KEY, MAX_BYTES, MIN_TEXT_CHARS
 
 DATA_EXT = {".csv", ".tsv", ".xlsx", ".xls", ".parquet", ".json"}
 
@@ -57,6 +58,7 @@ def fetch(
             return _from_html(url, resp.text, resp.status_code, engine="httpx")
 
     if ENGINE == "firecrawl" and FIRECRAWL_API_KEY and not auth:
+        guard(url, allow_private=ALLOW_PRIVATE)  # gate the target even via the managed API
         markdown, html = _firecrawl.scrape(url, timeout=timeout)
         cache.put(url, html.encode("utf-8"))
         result = _from_html(url, html, 200, engine="firecrawl")

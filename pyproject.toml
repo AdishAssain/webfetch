@@ -2,6 +2,10 @@
 name = "webfetch"
 version = "0.1.0"
 description = "Tiered web fetch + discovery toolkit for data-science scraping: httpx -> Playwright, with search and auth-session reuse."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Adish Assain" }]
 requires-python = ">=3.10"
 dependencies = [
     "httpx>=0.27,<0.29",  # pinned: the guarded transport uses httpcore pool internals

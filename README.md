@@ -89,9 +89,9 @@ data.gov.in) when they answer the question.
 ## Use — CLI
 
 ```bash
-webfetch get https://example.com --render
-webfetch discover "open TB datasets India" -n 15
-webfetch login https://portal.example.gov
+uv run webfetch get https://example.com --render
+uv run webfetch discover "open TB datasets India" -n 15
+uv run webfetch login https://portal.example.gov
 ```
 
 ## Make it universal across Claude Code + Codex
@@ -150,7 +150,10 @@ box — e.g. an AWS Mumbai (`ap-south-1`) instance running a small HTTP proxy, o
 `uv sync --extra socks`).
 
 With a proxy set, the destination is guarded at the URL level (the proxy resolves
-it, so it isn't IP-pinned like the direct path).
+it, so it isn't IP-pinned like the direct path). Treat a configured proxy as
+trusted infrastructure: webfetch guards the target URL, but the proxy does the
+actual DNS and egress, so it — not webfetch — is the enforcement point for what
+the proxy itself can reach.
 
 ## Security
 

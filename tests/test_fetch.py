@@ -73,9 +73,19 @@ def test_firecrawl_engine_path(monkeypatch):
     monkeypatch.setattr(fetchmod, "ENGINE", "firecrawl")
     monkeypatch.setattr(fetchmod, "FIRECRAWL_API_KEY", "key")
     monkeypatch.setattr(fetchmod._firecrawl, "scrape", lambda url, timeout=30.0: ("# md", HTML))
-    r = fetch("http://x.test/page")
+    r = fetch("http://1.1.1.1/page")  # public IP literal so the target guard passes
     assert r.engine == "firecrawl"
     assert r.markdown == "# md"
+
+
+def test_firecrawl_path_guards_target(monkeypatch):
+    monkeypatch.setattr(fetchmod, "ENGINE", "firecrawl")
+    monkeypatch.setattr(fetchmod, "FIRECRAWL_API_KEY", "key")
+    monkeypatch.setattr(fetchmod.cache, "get", lambda url: None)
+    monkeypatch.setattr(fetchmod._firecrawl, "scrape", lambda url, timeout=30.0: ("x", "x"))
+    # a private target must be blocked before it is handed to the managed API
+    with pytest.raises(UnsafeURLError):
+        fetch("http://127.0.0.1/x", render=True)
 
 
 def test_download_writes_file(http_transport, tmp_path):
