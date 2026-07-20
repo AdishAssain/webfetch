@@ -44,33 +44,33 @@ def _guard_request(request: httpx.Request) -> None:
     guard(str(request.url), allow_private=ALLOW_PRIVATE)
 
 
-def _guarded_transport() -> httpx.BaseTransport | None:
+def _guarded_transport() -> httpx.BaseTransport:
     """Transport that (1) connects only to the IP the guard validated — reusing
     that resolution closes the DNS-rebinding gap between check and connect — and
-    (2) caps the bytes read from the socket. Returns None (event-hook guard only)
-    if httpcore isn't shaped as expected."""
+    (2) caps the bytes read from the socket. Fails closed: raises if it can't be
+    installed, so the SSRF/size controls never silently degrade."""
+    transport = httpx.HTTPTransport()
     try:
-        transport = httpx.HTTPTransport()
         base_backend = type(transport._pool._network_backend)
+    except AttributeError as exc:
+        raise RuntimeError(
+            "cannot install the SSRF-guarded transport (unsupported httpx/httpcore)"
+        ) from exc
 
-        class _GuardedBackend(base_backend):
-            def connect_tcp(
-                self, host, port, timeout=None, local_address=None, socket_options=None
-            ):
-                ip = resolve_public(host, allow_private=ALLOW_PRIVATE)
-                stream = super().connect_tcp(
-                    ip,
-                    port,
-                    timeout=timeout,
-                    local_address=local_address,
-                    socket_options=socket_options,
-                )
-                return _CappedStream(stream, MAX_BYTES)
+    class _GuardedBackend(base_backend):
+        def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
+            ip = resolve_public(host, allow_private=ALLOW_PRIVATE)
+            stream = super().connect_tcp(
+                ip,
+                port,
+                timeout=timeout,
+                local_address=local_address,
+                socket_options=socket_options,
+            )
+            return _CappedStream(stream, MAX_BYTES)
 
-        transport._pool._network_backend = _GuardedBackend()
-        return transport
-    except Exception:
-        return None
+    transport._pool._network_backend = _GuardedBackend()
+    return transport
 
 
 def client(timeout: float, transport: httpx.BaseTransport | None = None) -> httpx.Client:

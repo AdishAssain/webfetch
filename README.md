@@ -126,11 +126,15 @@ every commit and pytest on push. CI runs the same chain on every push and PR.
 - **SSRF-guarded fetches:** only `http`/`https`; blocks private, loopback,
   link-local and cloud-metadata (169.254.169.254) addresses; re-validates every
   redirect hop; and **pins the connection to the validated IP**, so a rebinding
-  DNS server can't swap in an internal address after the check. The Playwright
-  path applies the same resolver guard to every browser request. Set
-  `WEBFETCH_ALLOW_PRIVATE=1` only if you deliberately need localhost/intranet.
-- **Bounded reads:** responses are size-capped and downloads stream to disk, so
-  a hostile server can't exhaust memory.
+  DNS server can't swap in an internal address after the check. It fails closed
+  if that transport can't be installed. The Playwright path applies the same
+  resolver guard to every browser request (best-effort: Chromium does its own
+  DNS, so it isn't IP-pinned like the HTTP path). Set `WEBFETCH_ALLOW_PRIVATE=1`
+  only if you deliberately need localhost/intranet.
+- **Bounded reads:** the socket read is size-capped and downloads stream to disk,
+  so an unbounded or chunked response can't exhaust memory. The cap is on wire
+  bytes; the decoded size of a *compressed* response isn't separately bounded, so
+  treat untrusted servers with care.
 - **Secret hygiene:** `.env` and saved sessions are git-ignored, `storage_state.json`
   is written `0600`, and authenticated pages are never written to the on-disk cache.
   Keys can optionally live in 1Password (`op://` refs) instead of plaintext.

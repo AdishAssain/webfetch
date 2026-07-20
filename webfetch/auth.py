@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ._browser import guarded_context
 from ._safeurl import guard
 from .config import ALLOW_PRIVATE, STATE_PATH, USER_AGENT
 
@@ -20,6 +21,8 @@ def login(url: str, state_path: Path | str = STATE_PATH) -> Path:
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         context = browser.new_context(user_agent=USER_AGENT)
+        if not ALLOW_PRIVATE:
+            guarded_context(context)  # same per-request guard as render()
         context.new_page().goto(url)
         input("Log in in the opened window, then press Enter here to save the session… ")
         context.storage_state(path=str(state_path))

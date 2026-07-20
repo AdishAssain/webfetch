@@ -11,13 +11,21 @@ _browser = None
 
 def _allowed(url: str) -> bool:
     """Full resolver guard (not a literal denylist) applied to every browser
-    request, so a rendered page can't reach private IPs via a subresource,
-    a redirect, or a public host that resolves internally."""
+    request, so a rendered page can't reach private IPs via a subresource, a
+    redirect, or a public host that resolves internally."""
     try:
         guard(url, allow_private=False)
     except UnsafeURLError:
         return False
     return True
+
+
+def guarded_context(context) -> None:
+    """Abort any browser request (subresource or redirect) to a non-public host."""
+    context.route(
+        "**/*",
+        lambda route: route.continue_() if _allowed(route.request.url) else route.abort(),
+    )
 
 
 def _get_browser():
@@ -49,10 +57,7 @@ def render(url: str, wait: str | None, auth: bool, timeout: float) -> str:
     context = _get_browser().new_context(storage_state=storage, user_agent=USER_AGENT)
     try:
         if not ALLOW_PRIVATE:
-            context.route(
-                "**/*",
-                lambda route: route.continue_() if _allowed(route.request.url) else route.abort(),
-            )
+            guarded_context(context)
         page = context.new_page()
         page.goto(url, wait_until="load", timeout=timeout * 1000)
         if wait:
