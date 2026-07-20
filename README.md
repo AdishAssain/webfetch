@@ -27,26 +27,25 @@ cp .env.example .env                 # point EXA_API_KEY at your 1Password ref
 Optional extra: `uv sync --extra parquet` (adds pyarrow for `.parquet` files).
 Run anything in the env with `uv run …` (e.g. `uv run webfetch discover "…"`).
 
-## Secrets (1Password)
+## Secrets
 
-No plaintext keys needed. Put an `op://` reference in `.env` and webfetch
-resolves it via the `op` CLI at runtime (you must be signed in to 1Password):
+Put your keys in `.env` (git-ignored). A raw key is all you need:
+
+```env
+EXA_API_KEY=your-exa-key
+```
+
+**Optional — 1Password:** if you use `op`, you can store an `op://` reference
+instead of the raw value and webfetch resolves it via the `op` CLI at runtime
+(right-click the field in the 1Password app -> **Copy Secret Reference**):
 
 ```env
 EXA_API_KEY=op://Private/Exa/credential
 ```
 
-Get the exact reference in the 1Password app: right-click the field ->
-**Copy Secret Reference**. Two ways to run:
-
-- **Auto-resolve (default):** just run normally — `webfetch discover "..."`. The
-  `op://` value is resolved on use (may trigger a Touch ID prompt).
-- **`op run` (whole session):** `op run --env-file=.env -- jupyter lab` (or any
-  command) injects the resolved value into the environment up front.
-
-For the **agents**, launch them with the secret in their environment so the MCP
-servers inherit it — `op run -- claude` / `op run -- codex` — and the configs
-reference `${EXA_API_KEY}` rather than embedding the key.
+Either form works. With an `op://` ref, run under `op run --env-file=.env -- <cmd>`
+or let it auto-resolve on use (needs `op` signed in). The example MCP configs use
+`${EXA_API_KEY}` expansion so nothing is embedded either way.
 
 ## Use — in code
 
@@ -124,15 +123,17 @@ every commit and pytest on push. CI runs the same chain on every push and PR.
 
 ## Security
 
-- **SSRF-guarded fetches:** every fetch/download allows only `http`/`https`,
-  re-checks the host on each redirect hop, and blocks private, loopback,
-  link-local and cloud-metadata (169.254.169.254) addresses. Set
+- **SSRF-guarded fetches:** only `http`/`https`; blocks private, loopback,
+  link-local and cloud-metadata (169.254.169.254) addresses; re-validates every
+  redirect hop; and **pins the connection to the validated IP**, so a rebinding
+  DNS server can't swap in an internal address after the check. The Playwright
+  path applies the same resolver guard to every browser request. Set
   `WEBFETCH_ALLOW_PRIVATE=1` only if you deliberately need localhost/intranet.
 - **Bounded reads:** responses are size-capped and downloads stream to disk, so
   a hostile server can't exhaust memory.
-- **No plaintext secrets:** keys resolve from 1Password at runtime; `.env` and
-  saved sessions are git-ignored, `storage_state.json` is written `0600`, and
-  authenticated pages are never written to the on-disk cache.
+- **Secret hygiene:** `.env` and saved sessions are git-ignored, `storage_state.json`
+  is written `0600`, and authenticated pages are never written to the on-disk cache.
+  Keys can optionally live in 1Password (`op://` refs) instead of plaintext.
 - **Safe parsing:** data files are fetched through the guarded client and parsed
   from memory (URLs never handed straight to pandas); the cache stores raw HTML,
   never pickled objects.

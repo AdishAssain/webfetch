@@ -24,7 +24,7 @@ def discover(
     if provider == "exa":
         return _exa(query, n, search_type, include_domains, exclude_domains, timeout)
     if provider == "tavily":
-        return _tavily(query, n, timeout)
+        return _tavily(query, n, include_domains, exclude_domains, timeout)
     raise RuntimeError("Set EXA_API_KEY or TAVILY_API_KEY to use discover().")
 
 
@@ -56,11 +56,16 @@ def _exa(query, n, search_type, include_domains, exclude_domains, timeout) -> li
     return results
 
 
-def _tavily(query, n, timeout) -> list[dict]:
+def _tavily(query, n, include_domains, exclude_domains, timeout) -> list[dict]:
+    payload = {"query": query, "max_results": n}
+    if include_domains:
+        payload["include_domains"] = include_domains
+    if exclude_domains:
+        payload["exclude_domains"] = exclude_domains
     resp = httpx.post(
         TAVILY_SEARCH_URL,
         headers={"Authorization": f"Bearer {TAVILY_API_KEY}"},
-        json={"query": query, "max_results": n},
+        json=payload,
         timeout=timeout,
     )
     resp.raise_for_status()

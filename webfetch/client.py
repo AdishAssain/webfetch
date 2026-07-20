@@ -76,19 +76,29 @@ def read_tables(url: str, **kwargs) -> list[pd.DataFrame]:
 def download(
     url: str, dest: str | Path, *, timeout: float = 60.0, max_bytes: int = MAX_BYTES
 ) -> Path:
-    """Stream a URL to disk (SSRF-guarded by the shared client) with a size cap."""
+    """Stream a URL to disk (SSRF-guarded by the shared client) with a size cap.
+
+    Writes to a temp file and renames on success, so a failed or oversized
+    download never leaves a truncated file at dest.
+    """
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    with _http.client(timeout) as http, http.stream("GET", url) as resp:
-        resp.raise_for_status()
-        total = 0
-        with open(dest, "wb") as fh:
-            for chunk in resp.iter_bytes():
-                total += len(chunk)
-                if total > max_bytes:
-                    raise ValueError(f"download exceeds {max_bytes} bytes")
-                fh.write(chunk)
-    return dest
+    tmp = dest.with_name(dest.name + ".part")
+    try:
+        with _http.client(timeout) as http, http.stream("GET", url) as resp:
+            resp.raise_for_status()
+            total = 0
+            with open(tmp, "wb") as fh:
+                for chunk in resp.iter_bytes():
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise ValueError(f"download exceeds {max_bytes} bytes")
+                    fh.write(chunk)
+        tmp.replace(dest)
+        return dest
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def _ext(url: str) -> str:
@@ -118,7 +128,6 @@ def _from_html(url, html, status, *, engine, from_cache=False) -> Result:
 def _data(url: str) -> Result:
     resp = _http.get(url)
     resp.raise_for_status()
-    _http.check_size(str(len(resp.content)))
     buf = io.BytesIO(resp.content)
     readers = {
         ".csv": pd.read_csv,

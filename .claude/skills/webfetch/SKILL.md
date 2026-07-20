@@ -13,7 +13,7 @@ data file → pandas; cache → httpx → Playwright.
     uv add "webfetch @ git+https://github.com/AdishAssain/webfetch.git"
     uv run playwright install chromium   # only if you need JS / auth rendering
 
-Secrets via 1Password refs in `.env` (e.g. `EXA_API_KEY=op://Private/Exa/credential`).
+Put keys in `.env` (`EXA_API_KEY=...`); 1Password `op://` refs also work.
 
 ## Use
 

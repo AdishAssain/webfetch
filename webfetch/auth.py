@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from .config import STATE_PATH, USER_AGENT
+from ._safeurl import guard
+from .config import ALLOW_PRIVATE, STATE_PATH, USER_AGENT
 
 
 def login(url: str, state_path: Path | str = STATE_PATH) -> Path:
@@ -13,6 +14,7 @@ def login(url: str, state_path: Path | str = STATE_PATH) -> Path:
     """
     from playwright.sync_api import sync_playwright
 
+    guard(url, allow_private=ALLOW_PRIVATE)
     state_path = Path(state_path)
     state_path.parent.mkdir(parents=True, exist_ok=True)
     with sync_playwright() as p:

@@ -1,22 +1,23 @@
 from __future__ import annotations
 
 import atexit
-from urllib.parse import urlparse
 
-from ._safeurl import guard
+from ._safeurl import UnsafeURLError, guard
 from .config import ALLOW_PRIVATE, STATE_PATH, USER_AGENT
-
-_BLOCKED_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0", "169.254.169.254"}
 
 _playwright = None
 _browser = None
 
 
-def _blocked(url: str) -> bool:
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        return True
-    return (parsed.hostname or "") in _BLOCKED_HOSTS
+def _allowed(url: str) -> bool:
+    """Full resolver guard (not a literal denylist) applied to every browser
+    request, so a rendered page can't reach private IPs via a subresource,
+    a redirect, or a public host that resolves internally."""
+    try:
+        guard(url, allow_private=False)
+    except UnsafeURLError:
+        return False
+    return True
 
 
 def _get_browser():
@@ -50,10 +51,10 @@ def render(url: str, wait: str | None, auth: bool, timeout: float) -> str:
         if not ALLOW_PRIVATE:
             context.route(
                 "**/*",
-                lambda route: route.abort() if _blocked(route.request.url) else route.continue_(),
+                lambda route: route.continue_() if _allowed(route.request.url) else route.abort(),
             )
         page = context.new_page()
-        page.goto(url, wait_until="networkidle", timeout=timeout * 1000)
+        page.goto(url, wait_until="load", timeout=timeout * 1000)
         if wait:
             page.wait_for_selector(wait, timeout=timeout * 1000)
         return page.content()

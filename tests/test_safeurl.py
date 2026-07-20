@@ -92,3 +92,19 @@ def test_unresolvable_host_blocked(monkeypatch):
     monkeypatch.setattr(safeurl.socket, "getaddrinfo", boom)
     with pytest.raises(UnsafeURLError):
         guard("http://nonexistent.invalid/")
+
+
+def test_resolve_public_returns_validated_ip(monkeypatch):
+    monkeypatch.setattr(
+        safeurl.socket, "getaddrinfo", lambda host, port: [(2, 1, 6, "", ("1.1.1.1", 0))]
+    )
+    assert safeurl.resolve_public("good.example.com") == "1.1.1.1"
+
+
+def test_resolve_public_blocks_private(monkeypatch):
+    # Pins the connection to the validated IP — a host resolving private is rejected.
+    monkeypatch.setattr(
+        safeurl.socket, "getaddrinfo", lambda host, port: [(2, 1, 6, "", ("127.0.0.1", 0))]
+    )
+    with pytest.raises(UnsafeURLError):
+        safeurl.resolve_public("sneaky.example.com")

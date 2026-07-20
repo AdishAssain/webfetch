@@ -96,3 +96,13 @@ def test_download_redirect_to_internal_blocked(http_transport, tmp_path):
     )
     with pytest.raises(UnsafeURLError):
         download("http://1.1.1.1/x", tmp_path / "x.bin")
+
+
+def test_auth_fetch_is_never_cached(monkeypatch):
+    puts = []
+    monkeypatch.setattr(fetchmod.cache, "get", lambda url: None)
+    monkeypatch.setattr(fetchmod.cache, "put", lambda url, data: puts.append(url))
+    monkeypatch.setattr(fetchmod._browser, "render", lambda url, wait, auth, timeout: HTML)
+    r = fetch("http://x.test/private", auth=True)
+    assert r.engine == "playwright"
+    assert puts == []  # authenticated pages must not touch the disk cache

@@ -90,3 +90,13 @@ def test_tavily_uses_bearer_header_not_body(monkeypatch):
     # security: the key must never travel in the request body
     assert "api_key" not in store["json"]
     assert "tvly-secret" not in str(store["json"])
+
+
+def test_tavily_domain_filters_are_forwarded(monkeypatch):
+    store = {}
+    monkeypatch.setattr(disc, "EXA_API_KEY", None)
+    monkeypatch.setattr(disc, "TAVILY_API_KEY", "k")
+    monkeypatch.setattr(disc.httpx, "post", _capturing_post(store, {"results": []}))
+    disc.discover("q", include_domains=["who.int"], exclude_domains=["spam.com"])
+    assert store["json"]["include_domains"] == ["who.int"]
+    assert store["json"]["exclude_domains"] == ["spam.com"]
