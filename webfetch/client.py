@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 
 import pandas as pd
 
-from . import _browser, _extract, _firecrawl, _http, cache
+from . import _browser, _extract, _firecrawl, _http, cache, sources
 from ._safeurl import guard
 from .config import ALLOW_PRIVATE, ENGINE, FIRECRAWL_API_KEY, MAX_BYTES, MIN_TEXT_CHARS
 
@@ -42,6 +42,11 @@ def fetch(
     """
     if _ext(url) in DATA_EXT:
         return _data(url)
+
+    # Sites the generic HTML path cannot reach (youtube, reddit, x) route first.
+    special = sources.route(url, auth=auth)
+    if special is not None:
+        return special
 
     heavy = render or auth
     if not heavy and not refresh:
