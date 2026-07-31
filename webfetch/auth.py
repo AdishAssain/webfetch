@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -19,6 +20,12 @@ def login(url: str, state_path: Path | str = STATE_PATH) -> Path:
     guard(url, allow_private=ALLOW_PRIVATE)
     state_path = Path(state_path)
     state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.parent.chmod(0o700)
+    # Create the file 0600 before Playwright writes into it. Chmod-after-write
+    # leaves the cookies world-readable for the duration of the write; a write
+    # to an existing file preserves its mode, so pre-creating closes that window.
+    fd = os.open(state_path, os.O_CREAT | os.O_WRONLY | os.O_TRUNC, 0o600)
+    os.close(fd)
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=False)
         context = browser.new_context(

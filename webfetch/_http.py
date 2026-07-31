@@ -19,6 +19,7 @@ from .config import (
 )
 
 RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
+MAX_RETRY_DELAY = 60.0  # seconds; upper bound on a server-supplied Retry-After
 
 _last_seen: dict[str, float] = {}
 _proxy_index = 0
@@ -73,12 +74,21 @@ def throttle(host: str | None) -> None:
 
 
 def _retry_delay(resp: httpx.Response, attempt: int) -> float:
+    """Delay before the next attempt, honouring Retry-After within limits.
+
+    Retry-After comes from the server, so it is untrusted input feeding a
+    sleep(). Unclamped, `Retry-After: 999999999` parks the caller for decades.
+    Negative values are ignored rather than treated as zero, since they signal
+    a malformed or hostile header.
+    """
     retry_after = resp.headers.get("retry-after")
     if retry_after:
         try:
-            return float(retry_after)
+            seconds = float(retry_after)
         except ValueError:
-            pass
+            seconds = None  # HTTP-date form is not honoured; fall through to backoff
+        if seconds is not None and seconds >= 0:
+            return min(seconds, MAX_RETRY_DELAY)
     return RETRY_BACKOFF * (2**attempt)
 
 

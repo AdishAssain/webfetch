@@ -6,12 +6,19 @@ from urllib.parse import urlparse
 
 _ALLOWED_SCHEMES = {"http", "https"}
 
+# Ranges the ipaddress properties below do not cover. Python treats RFC 6598
+# shared address space as public, but it is carrier-internal and routable to
+# infrastructure the caller does not own.
+_EXTRA_NONPUBLIC = (ipaddress.ip_network("100.64.0.0/10"),)
+
 
 class UnsafeURLError(ValueError):
     """Raised when a URL is disallowed by the SSRF guard."""
 
 
 def _is_nonpublic(ip: ipaddress._BaseAddress) -> bool:
+    if any(ip in net for net in _EXTRA_NONPUBLIC if net.version == ip.version):
+        return True
     return (
         ip.is_private
         or ip.is_loopback
