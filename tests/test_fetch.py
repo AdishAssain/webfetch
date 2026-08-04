@@ -29,7 +29,7 @@ def test_data_file_routes_to_pandas(monkeypatch):
 
 
 def test_cache_hit_short_circuits(monkeypatch):
-    monkeypatch.setattr(fetchmod.cache, "get", lambda url: HTML.encode())
+    monkeypatch.setattr(fetchmod.cache, "get", lambda url, scope=None: HTML.encode())
 
     def boom(*a, **k):
         raise AssertionError("network must not be touched on a cache hit")
@@ -42,8 +42,8 @@ def test_cache_hit_short_circuits(monkeypatch):
 
 
 def test_httpx_path_used_for_complete_pages(monkeypatch):
-    monkeypatch.setattr(fetchmod.cache, "get", lambda url: None)
-    monkeypatch.setattr(fetchmod.cache, "put", lambda url, data: None)
+    monkeypatch.setattr(fetchmod.cache, "get", lambda url, scope=None: None)
+    monkeypatch.setattr(fetchmod.cache, "put", lambda url, data, scope=None: None)
     monkeypatch.setattr(
         fetchmod._http, "get", lambda url, timeout=30.0: httpx.Response(200, text=HTML)
     )
@@ -53,8 +53,8 @@ def test_httpx_path_used_for_complete_pages(monkeypatch):
 
 
 def test_escalates_to_browser_on_thin_response(monkeypatch):
-    monkeypatch.setattr(fetchmod.cache, "get", lambda url: None)
-    monkeypatch.setattr(fetchmod.cache, "put", lambda url, data: None)
+    monkeypatch.setattr(fetchmod.cache, "get", lambda url, scope=None: None)
+    monkeypatch.setattr(fetchmod.cache, "put", lambda url, data, scope=None: None)
     monkeypatch.setattr(
         fetchmod._http, "get", lambda url, timeout=30.0: httpx.Response(200, text="<html></html>")
     )
@@ -65,8 +65,8 @@ def test_escalates_to_browser_on_thin_response(monkeypatch):
 
 
 def test_firecrawl_engine_path(monkeypatch):
-    monkeypatch.setattr(fetchmod.cache, "get", lambda url: None)
-    monkeypatch.setattr(fetchmod.cache, "put", lambda url, data: None)
+    monkeypatch.setattr(fetchmod.cache, "get", lambda url, scope=None: None)
+    monkeypatch.setattr(fetchmod.cache, "put", lambda url, data, scope=None: None)
     monkeypatch.setattr(
         fetchmod._http, "get", lambda url, timeout=30.0: httpx.Response(200, text="<html></html>")
     )
@@ -81,7 +81,7 @@ def test_firecrawl_engine_path(monkeypatch):
 def test_firecrawl_path_guards_target(monkeypatch):
     monkeypatch.setattr(fetchmod, "ENGINE", "firecrawl")
     monkeypatch.setattr(fetchmod, "FIRECRAWL_API_KEY", "key")
-    monkeypatch.setattr(fetchmod.cache, "get", lambda url: None)
+    monkeypatch.setattr(fetchmod.cache, "get", lambda url, scope=None: None)
     monkeypatch.setattr(fetchmod._firecrawl, "scrape", lambda url, timeout=30.0: ("x", "x"))
     # a private target must be blocked before it is handed to the managed API
     with pytest.raises(UnsafeURLError):
@@ -110,7 +110,7 @@ def test_download_redirect_to_internal_blocked(http_transport, tmp_path):
 
 def test_auth_fetch_is_never_cached(monkeypatch):
     puts = []
-    monkeypatch.setattr(fetchmod.cache, "get", lambda url: None)
+    monkeypatch.setattr(fetchmod.cache, "get", lambda url, scope=None: None)
     monkeypatch.setattr(fetchmod.cache, "put", lambda url, data: puts.append(url))
     monkeypatch.setattr(fetchmod._browser, "render", lambda url, wait, auth, timeout: HTML)
     r = fetch("http://x.test/private", auth=True)

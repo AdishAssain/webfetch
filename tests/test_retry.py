@@ -36,9 +36,26 @@ def test_retry_delay_honors_retry_after():
     assert _http._retry_delay(resp, 0) == 2.0
 
 
-def test_retry_delay_uses_exponential_backoff():
+def test_retry_delay_uses_jittered_exponential_backoff():
+    # Full jitter: the delay is drawn from (0, ceiling], where the ceiling grows
+    # exponentially. Callers that failed together must not retry together.
     resp = httpx.Response(503)
-    assert _http._retry_delay(resp, 2) == _http.RETRY_BACKOFF * 4
+    ceiling = min(_http.RETRY_BACKOFF * 4, _http.MAX_RETRY_DELAY)
+    draws = [_http._retry_delay(resp, 2) for _ in range(50)]
+    assert all(0 <= d <= ceiling for d in draws)
+    assert len(set(draws)) > 1, "delay is constant — jitter is not applied"
+
+
+def test_retry_delay_ceiling_grows_with_attempt():
+    resp = httpx.Response(503)
+    early = max(_http._retry_delay(resp, 0) for _ in range(50))
+    late = max(_http._retry_delay(resp, 3) for _ in range(50))
+    assert late > early
+
+
+def test_retry_delay_never_exceeds_the_cap():
+    resp = httpx.Response(503)
+    assert all(_http._retry_delay(resp, 20) <= _http.MAX_RETRY_DELAY for _ in range(50))
 
 
 def test_throttle_sleeps_when_interval_set(monkeypatch):

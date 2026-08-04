@@ -27,6 +27,23 @@ cp .env.example .env                 # point EXA_API_KEY at your 1Password ref
 Optional extra: `uv sync --extra parquet` (adds pyarrow for `.parquet` files).
 Run anything in the env with `uv run …` (e.g. `uv run webfetch discover "…"`).
 
+## Health
+
+```bash
+webfetch doctor          # config and capability checks
+webfetch doctor --live   # also fetch one page per engine
+webfetch doctor --json   # machine-readable; exits non-zero on any failure
+```
+
+Checks the SSRF guard, the guarded transport against the installed httpx,
+Chromium, yt-dlp, cache writability, saved session permissions, the search
+provider and proxy scope. `--live` is the only way to separate a configuration
+problem from a network one.
+
+`Result` also carries `attempts` and `fallback_reason`, so a retry that
+eventually succeeded and a silent escalation from httpx to the browser are both
+visible to the caller rather than looking like a clean fetch.
+
 ## Secrets
 
 Put your keys in `.env` (git-ignored). A raw key is all you need:

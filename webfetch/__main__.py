@@ -1,4 +1,5 @@
 import argparse
+import sys
 
 from .auth import login
 from .client import fetch
@@ -21,6 +22,10 @@ def main() -> None:
     log = sub.add_parser("login", help="save a login session for a gated site")
     log.add_argument("url")
 
+    doc = sub.add_parser("doctor", help="check the install and report what is broken")
+    doc.add_argument("--live", action="store_true", help="also make one request per engine")
+    doc.add_argument("--json", action="store_true", help="machine-readable output")
+
     args = parser.parse_args()
     if args.cmd == "get":
         r = fetch(args.url, render=args.render, auth=args.auth)
@@ -34,6 +39,11 @@ def main() -> None:
             print(f"- {item['title']}\n  {item['url']}")
     elif args.cmd == "login":
         print(f"Saved session -> {login(args.url)}")
+    elif args.cmd == "doctor":
+        from .doctor import report, run
+
+        # Exit code carries the verdict so a caller can branch on it.
+        sys.exit(report(run(live=args.live), as_json=args.json))
 
 
 if __name__ == "__main__":

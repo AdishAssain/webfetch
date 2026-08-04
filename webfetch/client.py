@@ -25,6 +25,10 @@ class Result:
     dataframe: pd.DataFrame | None = None
     from_cache: bool = False
     engine: str = "httpx"
+    # Diagnostics. A successful retry and a silent engine fallback both look
+    # like a clean fetch from the outside; these are how a caller sees them.
+    attempts: int = 1
+    fallback_reason: str = ""
 
 
 def fetch(
@@ -49,31 +53,50 @@ def fetch(
         return special
 
     heavy = render or auth
+    # The exit IP changes what a geo-aware site returns, so it is part of the
+    # cache key rather than an invisible dimension.
+    scope = _http._select_proxy(urlparse(url).hostname)
     if not heavy and not refresh:
-        hit = cache.get(url)
+        hit = cache.get(url, scope=scope)
         if hit is not None:
             return _from_html(
                 url, hit.decode("utf-8", "replace"), 200, engine="cache", from_cache=True
             )
 
+    fallback_reason = ""
     if not heavy:
         resp = _http.get(url, timeout=timeout)
         if resp.status_code < 400 and _looks_complete(resp.text):
-            cache.put(url, resp.text.encode("utf-8"))
-            return _from_html(url, resp.text, resp.status_code, engine="httpx")
+            cache.put(url, resp.text.encode("utf-8"), scope=scope)
+            result = _from_html(url, resp.text, resp.status_code, engine="httpx")
+            result.attempts = getattr(resp, "_webfetch_attempts", 1)
+            return result
+        # Escalating to a browser is a fallback, not a success. Record why, or
+        # a site that quietly stopped serving usable HTML looks the same as one
+        # that always needed rendering.
+        fallback_reason = (
+            f"httpx status {resp.status_code}"
+            if resp.status_code >= 400
+            else f"httpx body below MIN_TEXT_CHARS ({len(_extract.clean_text(resp.text))} chars)"
+        )
 
     if ENGINE == "firecrawl" and FIRECRAWL_API_KEY and not auth:
         guard(url, allow_private=ALLOW_PRIVATE)  # gate the target even via the managed API
         markdown, html = _firecrawl.scrape(url, timeout=timeout)
-        cache.put(url, html.encode("utf-8"))
+        cache.put(url, html.encode("utf-8"), scope=scope)
         result = _from_html(url, html, 200, engine="firecrawl")
         result.markdown = markdown or result.markdown
+        result.fallback_reason = fallback_reason
         return result
 
     html = _browser.render(url, wait=wait, auth=auth, timeout=timeout)
+    # An authenticated render is never cached: the bytes are scoped to a session
+    # the key does not carry.
     if not auth:
-        cache.put(url, html.encode("utf-8"))
-    return _from_html(url, html, 200, engine="playwright")
+        cache.put(url, html.encode("utf-8"), scope=scope)
+    result = _from_html(url, html, 200, engine="playwright")
+    result.fallback_reason = fallback_reason
+    return result
 
 
 def read_tables(url: str, **kwargs) -> list[pd.DataFrame]:

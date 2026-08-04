@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import random
 import time
 
 import httpx
@@ -89,7 +90,10 @@ def _retry_delay(resp: httpx.Response, attempt: int) -> float:
             seconds = None  # HTTP-date form is not honoured; fall through to backoff
         if seconds is not None and seconds >= 0:
             return min(seconds, MAX_RETRY_DELAY)
-    return RETRY_BACKOFF * (2**attempt)
+    # Exponential with full jitter. Without jitter, callers that failed together
+    # retry together and hit the recovering host as one wave.
+    ceiling = min(RETRY_BACKOFF * (2**attempt), MAX_RETRY_DELAY)
+    return random.uniform(0, ceiling)
 
 
 def backoff(resp: httpx.Response, attempt: int) -> None:
@@ -164,14 +168,22 @@ def client(
 
 def get(url: str, timeout: float = 30.0) -> httpx.Response:
     """GET with per-host throttling and retry+backoff on 429/5xx. Each attempt
-    uses a fresh client, so a rotating proxy pool changes exit IP on retry."""
+    uses a fresh client, so a rotating proxy pool changes exit IP on retry.
+
+    The attempt count is attached to the response. A retry that eventually
+    succeeds is invisible otherwise, which hides a dependency degrading until it
+    fails outright.
+    """
     host = httpx.URL(url).host
     resp = None
+    attempts = 0
     for attempt in range(MAX_RETRIES + 1):
         throttle(host)
+        attempts += 1
         with client(timeout, host=host) as http:
             resp = http.get(url)
         if resp.status_code not in RETRY_STATUS or attempt >= MAX_RETRIES:
             break
         backoff(resp, attempt)
+    resp._webfetch_attempts = attempts
     return resp

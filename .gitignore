@@ -26,3 +26,6 @@ build/
 .DS_Store
 .idea/
 .vscode/
+
+# graphify code-graph output
+graphify-out/
