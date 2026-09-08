@@ -13,6 +13,8 @@ def clean_text(html: str) -> str:
 
 
 def tables(html: str) -> list[pd.DataFrame]:
+    if not html.strip():
+        return []
     try:
         return pd.read_html(io.StringIO(html), flavor="lxml")
     except ValueError:

@@ -80,7 +80,8 @@ def test_unparsable_retry_after_falls_back_to_backoff():
     assert _retry_delay(_resp("Wed, 21 Oct 2026 07:28:00 GMT"), 1) > 0
 
 
-def test_backoff_grows_without_the_header():
+def test_backoff_grows_without_the_header(monkeypatch):
+    monkeypatch.setattr("webfetch._http.random.uniform", lambda low, high: high)
     assert _retry_delay(_resp(None), 2) > _retry_delay(_resp(None), 0)
 
 

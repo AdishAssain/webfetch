@@ -14,6 +14,11 @@ def main() -> None:
     get.add_argument("url")
     get.add_argument("--render", action="store_true", help="force browser render")
     get.add_argument("--auth", action="store_true", help="reuse saved login session")
+    get.add_argument("--wait", metavar="SELECTOR", help="render and wait for a CSS selector")
+    get.add_argument("--refresh", action="store_true", help="bypass cached content")
+    get.add_argument(
+        "--archive", action="store_true", help="fall back to an existing Wayback snapshot"
+    )
 
     dis = sub.add_parser("discover", help="search for candidate URLs")
     dis.add_argument("query")
@@ -28,12 +33,26 @@ def main() -> None:
 
     args = parser.parse_args()
     if args.cmd == "get":
-        r = fetch(args.url, render=args.render, auth=args.auth)
+        r = fetch(
+            args.url,
+            render=args.render,
+            auth=args.auth,
+            wait=args.wait,
+            refresh=args.refresh,
+            archive=args.archive,
+        )
         print(f"[{r.engine}] status={r.status} tables={len(r.tables)} url={r.url}")
+        if r.fallback_reason:
+            print(f"fallback: {r.fallback_reason}", file=sys.stderr)
+        if r.archive_url:
+            print(f"archived: {r.archive_timestamp} {r.archive_url}", file=sys.stderr)
         if r.dataframe is not None:
             print(r.dataframe.head())
         else:
-            print(r.text[:2000])
+            print((r.text or r.markdown)[:2000])
+        if r.error or r.status >= 400:
+            print(f"error: {r.error or f'HTTP {r.status}'}", file=sys.stderr)
+            sys.exit(1)
     elif args.cmd == "discover":
         for item in discover(args.query, n=args.n):
             print(f"- {item['title']}\n  {item['url']}")

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import httpx
 
-from .config import EXA_API_KEY, EXA_SEARCH_URL, TAVILY_API_KEY, TAVILY_SEARCH_URL
+from .config import EXA_API_KEY, EXA_SEARCH_URL, TAVILY_API_KEY, TAVILY_SEARCH_URL, _resolve_secret
 
 
 def discover(
@@ -28,6 +28,33 @@ def discover(
     raise RuntimeError("Set EXA_API_KEY or TAVILY_API_KEY to use discover().")
 
 
+def _require_key(name: str, value: str | None) -> str:
+    value = _resolve_secret(value.strip() if value else value)
+    if not value or not value.strip():
+        raise RuntimeError(f"Set {name} to use this discovery provider.")
+    if value.strip().startswith("op://"):
+        raise RuntimeError(
+            f"{name} is an unresolved 1Password reference. "
+            "Check that op is installed, signed in, and permitted to read the secret."
+        )
+    return value.strip()
+
+
+def _check_response(resp: httpx.Response, provider: str) -> None:
+    try:
+        resp.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        if resp.status_code not in {401, 403}:
+            raise
+        raise httpx.HTTPStatusError(
+            f"{provider} discovery returned HTTP {resp.status_code}; "
+            f"check {provider.upper()}_API_KEY and provider account access. "
+            "If using 1Password, check that op can resolve the reference.",
+            request=exc.request,
+            response=resp,
+        ) from None
+
+
 def _exa(query, n, search_type, include_domains, exclude_domains, timeout) -> list[dict]:
     payload = {
         "query": query,
@@ -40,9 +67,12 @@ def _exa(query, n, search_type, include_domains, exclude_domains, timeout) -> li
     if exclude_domains:
         payload["excludeDomains"] = exclude_domains
     resp = httpx.post(
-        EXA_SEARCH_URL, headers={"x-api-key": EXA_API_KEY}, json=payload, timeout=timeout
+        EXA_SEARCH_URL,
+        headers={"x-api-key": _require_key("EXA_API_KEY", EXA_API_KEY)},
+        json=payload,
+        timeout=timeout,
     )
-    resp.raise_for_status()
+    _check_response(resp, "exa")
     results = []
     for r in resp.json().get("results", []):
         highlights = r.get("highlights") or []
@@ -64,11 +94,11 @@ def _tavily(query, n, include_domains, exclude_domains, timeout) -> list[dict]:
         payload["exclude_domains"] = exclude_domains
     resp = httpx.post(
         TAVILY_SEARCH_URL,
-        headers={"Authorization": f"Bearer {TAVILY_API_KEY}"},
+        headers={"Authorization": f"Bearer {_require_key('TAVILY_API_KEY', TAVILY_API_KEY)}"},
         json=payload,
         timeout=timeout,
     )
-    resp.raise_for_status()
+    _check_response(resp, "tavily")
     return [
         {"url": r["url"], "title": r.get("title", ""), "text": r.get("content", "")}
         for r in resp.json().get("results", [])

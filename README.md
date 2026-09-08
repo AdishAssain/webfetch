@@ -107,9 +107,63 @@ data.gov.in) when they answer the question.
 
 ```bash
 uv run webfetch get https://example.com --render
+uv run webfetch get https://example.com/supplements --wait 'a.download' --refresh
 uv run webfetch discover "open TB datasets India" -n 15
 uv run webfetch login https://portal.example.gov
 ```
+
+## Diagnosing access and extraction failures
+
+`Result.status` preserves the final browser navigation's HTTP status. `Result.error`
+reports HTTP errors and empty extracted content, even when the server returns a
+2xx status. The CLI prints the error and fallback reason and exits with code 1
+for these failures. Empty or failed rendered pages are not cached; existing
+cache entries from before this validation are invalidated on upgrade.
+
+Empty browser shells get up to five seconds of additional waiting for text.
+Use `--refresh` to bypass the cache, and `--wait 'CSS_SELECTOR'` when a page needs
+time to load a particular element. A wait forces Playwright rendering, including
+when Firecrawl is configured. Waiting does not guarantee a site's challenge will
+complete or that access will be granted.
+
+`download()` streams through HTTP only. It does not use Playwright or saved login
+sessions. It requires a complete HTTP 200 response; 202, 204, and partial 206
+responses are rejected without replacing the destination. On 401/403 its exception
+explains this limitation; a `cf-mitigated:
+challenge` response is identified as a Cloudflare challenge. A generic 403 alone
+does not establish whether the cause is authentication, site policy, or blocking.
+
+Discovery retries resolution of `op://` references at search time if import-time
+resolution failed, then rejects missing or unresolved keys before sending a
+search request. `doctor --live` also verifies search authentication. Provider
+401/403 errors identify the key variable to check,
+without echoing its value or the response body. A configured key is not proof
+that the provider will accept it; verify with `webfetch discover 'test query'`.
+
+For a public URL that fails, opt into an existing Wayback snapshot:
+
+```bash
+uv run webfetch get https://example.com/report --archive
+```
+
+```python
+from webfetch import fetch, wayback, download
+
+r = fetch("https://example.com/report", archive=True)
+print(r.archive_url, r.archive_timestamp)  # nonempty only after successful fallback
+
+# For PDFs, look up the snapshot explicitly and use the bounded downloader.
+snapshot = wayback("https://example.com/report.pdf")
+if snapshot:
+    print(snapshot.timestamp, snapshot.url)
+    download(snapshot.url, "data/archived-report.pdf")
+```
+
+The [Wayback Availability API](https://archive.org/help/wayback_api.php) returns
+an existing capture; this does not submit a new capture. Archived content can be
+out of date. Fallback is disabled by default, unavailable for authenticated or
+private URLs, and uses the same guarded fetch path. The CLI labels snapshot URLs
+and timestamps. Missing or inaccessible snapshots preserve the live failure.
 
 ## Make it universal across Claude Code + Codex
 
