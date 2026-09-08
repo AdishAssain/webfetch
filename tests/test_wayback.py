@@ -1,3 +1,5 @@
+import json
+
 import httpx
 import pytest
 
@@ -218,3 +220,32 @@ def test_broken_archive_preserves_live_error(monkeypatch):
     result = client.fetch(URL, archive=True)
     assert result.status == 403
     assert "Wayback lookup/fetch failed" in result.fallback_reason
+
+
+@pytest.mark.parametrize("section", ["payload", "archived_snapshots", "closest"])
+@pytest.mark.parametrize("malformed", [None, [], "invalid", 17, False])
+def test_malformed_archive_sections_preserve_live_failure(monkeypatch, section, malformed):
+    from webfetch import _archive
+
+    payload = malformed
+    if section == "archived_snapshots":
+        payload = {"archived_snapshots": malformed}
+    elif section == "closest":
+        payload = {"archived_snapshots": {"closest": malformed}}
+    monkeypatch.setattr(
+        _archive._http,
+        "get",
+        lambda url, **k: httpx.Response(
+            200, request=httpx.Request("GET", url), content=json.dumps(payload)
+        ),
+    )
+    assert _archive.wayback(URL) is None
+
+    live = client.Result(url=URL, status=403, error="HTTP 403")
+    monkeypatch.setattr(client, "_fetch", lambda *a, **k: live)
+    result = client.fetch(URL, archive=True)
+    assert result is live
+    assert result.status == 403
+    assert result.error == "HTTP 403"
+    assert not result.archive_url
+    assert "no snapshot" in result.fallback_reason.lower()

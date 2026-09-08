@@ -22,7 +22,15 @@ def wayback(url: str, *, timeout: float = 30.0) -> Snapshot | None:
         "https://archive.org/wayback/available?" + urlencode({"url": url}), timeout=timeout
     )
     response.raise_for_status()
-    closest = response.json().get("archived_snapshots", {}).get("closest", {})
+    payload = response.json()
+    if not isinstance(payload, dict):
+        return None
+    snapshots = payload.get("archived_snapshots")
+    if not isinstance(snapshots, dict):
+        return None
+    closest = snapshots.get("closest")
+    if not isinstance(closest, dict):
+        return None
     if closest.get("available") is not True or str(closest.get("status")) != "200":
         return None
     timestamp = str(closest.get("timestamp", ""))
