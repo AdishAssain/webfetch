@@ -249,3 +249,37 @@ def test_malformed_archive_sections_preserve_live_failure(monkeypatch, section, 
     assert result.error == "HTTP 403"
     assert not result.archive_url
     assert "no snapshot" in result.fallback_reason.lower()
+
+
+@pytest.mark.parametrize("malformed_url", [None, [], {}, 17, False, True])
+def test_malformed_snapshot_urls_preserve_live_failure(monkeypatch, malformed_url):
+    from webfetch import _archive
+
+    monkeypatch.setattr(
+        _archive._http,
+        "get",
+        lambda url, **k: httpx.Response(
+            200,
+            request=httpx.Request("GET", url),
+            json={
+                "archived_snapshots": {
+                    "closest": {
+                        "available": True,
+                        "status": "200",
+                        "timestamp": "20260102030405",
+                        "url": malformed_url,
+                    }
+                }
+            },
+        ),
+    )
+    assert _archive.wayback(URL) is None
+
+    live = client.Result(url=URL, status=403, error="HTTP 403")
+    monkeypatch.setattr(client, "_fetch", lambda *a, **k: live)
+    result = client.fetch(URL, archive=True)
+    assert result is live
+    assert result.status == 403
+    assert result.error == "HTTP 403"
+    assert not result.archive_url
+    assert "no snapshot" in result.fallback_reason.lower()

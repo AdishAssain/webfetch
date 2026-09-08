@@ -33,8 +33,11 @@ def wayback(url: str, *, timeout: float = 30.0) -> Snapshot | None:
         return None
     if closest.get("available") is not True or str(closest.get("status")) != "200":
         return None
+    snapshot_url = closest.get("url")
+    if not isinstance(snapshot_url, str):
+        return None
     timestamp = str(closest.get("timestamp", ""))
-    target = urlsplit(closest.get("url", ""))
+    target = urlsplit(snapshot_url)
     if (
         target.scheme not in {"http", "https"}
         or target.netloc != "web.archive.org"
