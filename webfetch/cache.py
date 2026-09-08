@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .config import CACHE_DIR, CACHE_TTL, ENGINE
 
-SCHEMA = 2  # bump when the stored shape changes, so old entries expire on upgrade
+SCHEMA = 3  # invalidate entries cached before browser status/error validation
 
 
 def _path(url: str, scope: str | None = None) -> Path:

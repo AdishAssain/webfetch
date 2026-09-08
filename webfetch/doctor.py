@@ -83,8 +83,12 @@ def _session_state() -> tuple[str, str]:
 
 def _search_provider() -> tuple[str, str]:
     if config.EXA_API_KEY:
+        if config.EXA_API_KEY.strip().startswith("op://"):
+            return FAIL, "EXA_API_KEY is an unresolved 1Password reference"
         return OK, "exa key configured"
     if config.TAVILY_API_KEY:
+        if config.TAVILY_API_KEY.strip().startswith("op://"):
+            return FAIL, "TAVILY_API_KEY is an unresolved 1Password reference"
         return OK, "tavily key configured"
     return WARN, "no EXA or TAVILY key — discover() raises"
 
@@ -125,6 +129,13 @@ def _proxy_config() -> tuple[str, str]:
 # ── live checks ──────────────────────────────────────────────────────────
 
 
+def _live_search() -> tuple[str, str]:
+    from .search import discover
+
+    results = discover("webfetch connectivity check", n=1, timeout=15.0)
+    return OK, f"search provider accepted authentication; {len(results)} result(s)"
+
+
 def _live(url: str, expect_engine: str) -> tuple[str, str]:
     from .client import fetch
 
@@ -150,6 +161,11 @@ def run(live: bool = False) -> list[Check]:
     ]
     if live:
         checks += [
+            _probe(
+                "live:search",
+                _live_search,
+                "check the search API key, provider access, and 1Password sign-in",
+            ),
             _probe("live:httpx", lambda: _live("https://example.com", "httpx"), "check network"),
             _probe(
                 "live:reddit",

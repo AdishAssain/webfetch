@@ -59,7 +59,11 @@ def test_escalates_to_browser_on_thin_response(monkeypatch):
         fetchmod._http, "get", lambda url, timeout=30.0: httpx.Response(200, text="<html></html>")
     )
     monkeypatch.setattr(fetchmod, "ENGINE", "auto")
-    monkeypatch.setattr(fetchmod._browser, "render", lambda url, wait, auth, timeout: HTML)
+    monkeypatch.setattr(
+        fetchmod._browser,
+        "render_page",
+        lambda url, wait, auth, timeout: fetchmod._browser.RenderedPage(HTML, 200, url),
+    )
     r = fetch("http://x.test/spa")
     assert r.engine == "playwright"
 
@@ -112,7 +116,11 @@ def test_auth_fetch_is_never_cached(monkeypatch):
     puts = []
     monkeypatch.setattr(fetchmod.cache, "get", lambda url, scope=None: None)
     monkeypatch.setattr(fetchmod.cache, "put", lambda url, data: puts.append(url))
-    monkeypatch.setattr(fetchmod._browser, "render", lambda url, wait, auth, timeout: HTML)
+    monkeypatch.setattr(
+        fetchmod._browser,
+        "render_page",
+        lambda url, wait, auth, timeout: fetchmod._browser.RenderedPage(HTML, 200, url),
+    )
     r = fetch("http://x.test/private", auth=True)
     assert r.engine == "playwright"
     assert puts == []  # authenticated pages must not touch the disk cache

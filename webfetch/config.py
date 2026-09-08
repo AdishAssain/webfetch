@@ -8,7 +8,10 @@ load_dotenv()
 
 def _secret(name: str) -> str | None:
     """Read an env var, resolving a 1Password `op://` reference via the op CLI."""
-    value = os.getenv(name)
+    return _resolve_secret(os.getenv(name))
+
+
+def _resolve_secret(value: str | None) -> str | None:
     if value and value.startswith("op://"):
         import subprocess
 

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import atexit
+from contextlib import suppress
+from dataclasses import dataclass
 from urllib.parse import urlsplit
 
+from . import _extract
 from ._http import _select_proxy
 from ._safeurl import UnsafeURLError, guard, resolve_public
 from .config import ALLOW_PRIVATE, STATE_PATH, USER_AGENT
@@ -103,7 +106,18 @@ def _resolver_rules(url: str) -> str | None:
     return f"MAP {host} {resolve_public(host, allow_private=False)}"
 
 
+@dataclass
+class RenderedPage:
+    html: str
+    status: int
+    url: str
+
+
 def render(url: str, wait: str | None, auth: bool, timeout: float) -> str:
+    return render_page(url, wait=wait, auth=auth, timeout=timeout).html
+
+
+def render_page(url: str, wait: str | None, auth: bool, timeout: float) -> RenderedPage:
     guard(url, allow_private=ALLOW_PRIVATE)
     storage = str(STATE_PATH) if auth and STATE_PATH.exists() else None
     # A fresh context per fetch keeps cookies/auth isolated; the browser is reused.
@@ -114,9 +128,27 @@ def render(url: str, wait: str | None, auth: bool, timeout: float) -> str:
         if not ALLOW_PRIVATE:
             guarded_context(context)
         page = context.new_page()
-        page.goto(url, wait_until="load", timeout=timeout * 1000)
+        response = None
+
+        def navigation_response(received):
+            nonlocal response
+            if received.request.is_navigation_request() and received.frame == page.main_frame:
+                response = received
+
+        page.on("response", navigation_response)
+        initial = page.goto(url, wait_until="load", timeout=timeout * 1000)
+        response = response or initial
+        if response is None:
+            raise RuntimeError("browser navigation returned no HTTP response")
         if wait:
             page.wait_for_selector(wait, timeout=timeout * 1000)
-        return page.content()
+        elif response.status < 400 and not _extract.clean_text(page.content()).strip():
+            from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+
+            with suppress(PlaywrightTimeoutError):
+                page.wait_for_function(
+                    "() => !!document.body?.innerText.trim()", timeout=min(timeout, 5.0) * 1000
+                )
+        return RenderedPage(html=page.content(), status=response.status, url=page.url)
     finally:
         context.close()
