@@ -87,16 +87,16 @@ download("https://site/report.pdf", "data/report.pdf")
 fetch("https://portal/dashboard", render=True, wait="table.results")
 ```
 
-## Use — gated sites (e.g. Nikshay)
+## Use — gated sites
 
 Log in once by hand; the session is saved and reused. Credentials never enter
 code or the agent.
 
 ```bash
-webfetch login https://reports.nikshay.in    # opens a browser; log in, press Enter
+webfetch login https://portal.example.com    # opens a browser; log in, press Enter
 ```
 ```python
-fetch("https://reports.nikshay.in/private/page", auth=True)   # reuses the session
+fetch("https://portal.example.com/private/page", auth=True)   # reuses the session
 ```
 
 The saved `storage_state.json` is git-ignored — it's effectively a credential.
@@ -208,7 +208,7 @@ Proxies / IP masking (both the HTTP and Playwright paths use them):
   rotates the exit IP per request, which is the simplest and most reliable method.
 - `WEBFETCH_PROXIES=http://p1:port,http://p2:port` — a pool rotated round-robin per
   request (and per retry), for when you hold a list of static proxies.
-- `WEBFETCH_PROXY_HOSTS=data.gov.in,nikshay.in` — route **only** these hosts (and
+- `WEBFETCH_PROXY_HOSTS=example.com,portal.example.org` — route **only** these hosts (and
   their subdomains) through the proxy; everything else goes direct. This is the
   "only if required" switch.
 

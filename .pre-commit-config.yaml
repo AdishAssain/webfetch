@@ -19,6 +19,21 @@ repos:
 
   - repo: local
     hooks:
+      - id: guard-public
+        name: no secrets, internal refs or home paths
+        entry: python3 scripts/guard_public.py
+        language: system
+        # Every file type, not just Python: the references this catches turn up
+        # in README and .env.example as readily as in source.
+        types: [text]
+      - id: public-commit-email
+        name: commit email is not a work address
+        # The work address already in this repository's history cannot be
+        # removed from a public repo with any confidence, so the control has to
+        # be preventing the next one.
+        entry: python3 scripts/guard_public.py --check-author
+        language: system
+        pass_filenames: false
       - id: vulture
         name: vulture (dead code)
         entry: uv run vulture
