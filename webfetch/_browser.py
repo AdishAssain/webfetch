@@ -27,11 +27,36 @@ def _allowed(url: str) -> bool:
     return True
 
 
+# Schemes that resolve inside the page and issue no network request, so they
+# cannot reach a private host. file: is deliberately absent: it does read the
+# local disk, which is among the things this guard exists to prevent.
+INERT_SCHEMES = ("data:", "blob:", "about:")
+
+
+def _route_allowed(url: str) -> bool:
+    """Whether one browser request may proceed.
+
+    A host guard only means something for a request that goes to a host. An
+    interactive login is mostly not http(s) — x.com drives its flow through
+    blob: and data: URLs and about:blank iframes — and aborting those broke the
+    page while protecting against nothing: clicking Continue simply did not
+    proceed. Anything neither inert nor http(s) stays aborted, so an unfamiliar
+    scheme fails closed.
+    """
+    # A URL scheme is case-insensitive (RFC 3986), so match on a lowered copy.
+    lowered = url.lower()
+    if lowered.startswith(INERT_SCHEMES):
+        return True
+    if not lowered.startswith(("http://", "https://")):
+        return False
+    return _allowed(url)
+
+
 def guarded_context(context) -> None:
     """Abort any browser request (subresource or redirect) to a non-public host."""
     context.route(
         "**/*",
-        lambda route: route.continue_() if _allowed(route.request.url) else route.abort(),
+        lambda route: route.continue_() if _route_allowed(route.request.url) else route.abort(),
     )
 
 
