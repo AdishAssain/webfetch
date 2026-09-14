@@ -72,13 +72,49 @@ def _cache_dir() -> tuple[str, str]:
 
 
 def _session_state() -> tuple[str, str]:
+    """A session file has to hold a session, not merely exist.
+
+    This checked presence and mode only. An aborted `webfetch login` leaves a
+    0-byte file behind, and the check reported ok on it: green, while every
+    auth fetch would still 401. A check that cannot fail for the reason it
+    exists is worse than no check, because it gets believed.
+    """
     p = config.STATE_PATH
     if not p.exists():
         return WARN, f"no saved session at {p} — auth fetches and x.com return 401"
     mode = p.stat().st_mode & 0o777
     if mode != 0o600:
         return FAIL, f"{p} mode is {mode:o}, expected 600 — session cookies are readable"
-    return OK, f"{p} present, mode 600"
+
+    raw = p.read_text(errors="replace")
+    if not raw.strip():
+        return WARN, f"{p} is empty — an aborted login leaves this; run webfetch login again"
+    try:
+        state = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return FAIL, f"{p} is unreadable as JSON ({exc.msg}) — run webfetch login again"
+
+    # Council review found the check trusting whatever parsed. A non-object
+    # payload raised AttributeError, and {"cookies": "garbage"} reported ok
+    # with "7 cookie(s)" — the length of the string. Both repeat the mistake
+    # the check exists to stop: reading a shape for a session.
+    if not isinstance(state, dict):
+        return FAIL, (
+            f"{p} is not a session object (found {type(state).__name__}) — run webfetch login again"
+        )
+    cookies = state.get("cookies", [])
+    origins = state.get("origins", [])
+    for field, value in (("cookies", cookies), ("origins", origins)):
+        if not isinstance(value, list):
+            return FAIL, (
+                f"{p} has a {field} field of type {type(value).__name__}, expected a list"
+                " — unexpected shape; run webfetch login again"
+            )
+    # Some sites authenticate from localStorage rather than cookies, so either
+    # alone is a session. Neither means nothing was ever captured.
+    if not cookies and not origins:
+        return WARN, f"{p} holds no cookies and no origins — empty session"
+    return OK, f"{p} present, mode 600, {len(cookies)} cookie(s), {len(origins)} origin(s)"
 
 
 def _search_provider() -> tuple[str, str]:
