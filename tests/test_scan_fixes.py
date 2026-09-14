@@ -88,7 +88,7 @@ def test_backoff_grows_without_the_header(monkeypatch):
 # ── credential-exposure.session-file-permissions ─────────────────────────
 
 
-def test_login_writes_session_file_unreadable_by_others(tmp_path):
+def test_save_state_writes_session_file_unreadable_by_others(tmp_path):
     """Cookies must never be world-readable, not even during the write.
 
     This used to be enforced by pre-creating the real path 0600 before the

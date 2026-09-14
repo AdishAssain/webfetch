@@ -43,9 +43,11 @@ def _route_allowed(url: str) -> bool:
     proceed. Anything neither inert nor http(s) stays aborted, so an unfamiliar
     scheme fails closed.
     """
-    if url.startswith(INERT_SCHEMES):
+    # A URL scheme is case-insensitive (RFC 3986), so match on a lowered copy.
+    lowered = url.lower()
+    if lowered.startswith(INERT_SCHEMES):
         return True
-    if not url.startswith(("http://", "https://")):
+    if not lowered.startswith(("http://", "https://")):
         return False
     return _allowed(url)
 

@@ -92,6 +92,9 @@ class FakeContext:
         self.fail = fail
         self.written_to = None
 
+    def new_page(self):
+        return type("Page", (), {"goto": staticmethod(lambda url: None)})()
+
     def storage_state(self, path):
         if self.fail:
             raise RuntimeError("capture failed")
@@ -135,3 +138,98 @@ class TestSaveState:
         target = tmp_path / "nested" / "storage_state.json"
         auth._save_state(FakeContext(), target)
         assert target.parent.stat().st_mode & 0o777 == 0o700
+
+
+class TestSessionStateShape:
+    """Council review (5 seats) converged here: the check trusted the payload.
+
+    `{"cookies": "garbage"}` reported ok with "7 cookie(s)" — the length of the
+    string. A non-object payload raised AttributeError, which _probe turns into
+    a FAIL, so it failed safe, but reported a Python error rather than a
+    diagnosis. Both are the same mistake the check was written to stop: taking
+    a file's presence, or its truthiness, for a session.
+    """
+
+    @pytest.mark.parametrize("payload", ["[]", "null", '"a string"', "5"])
+    def test_a_non_object_payload_is_reported_not_raised(self, state_path, payload):
+        write(state_path, payload)
+        status, detail = doctor._session_state()
+        assert status != doctor.OK
+        assert "AttributeError" not in detail
+        assert "object" in detail.lower() or "shape" in detail.lower()
+
+    @pytest.mark.parametrize(
+        "payload",
+        [
+            '{"cookies": "garbage"}',
+            '{"cookies": {}, "origins": 3}',
+            '{"origins": "https://x.com"}',
+        ],
+    )
+    def test_fields_that_are_not_lists_do_not_pass(self, state_path, payload):
+        write(state_path, payload)
+        status, _ = doctor._session_state()
+        assert status != doctor.OK
+
+    def test_a_garbage_cookie_field_is_never_counted(self, state_path):
+        write(state_path, '{"cookies": "garbage", "origins": []}')
+        _, detail = doctor._session_state()
+        assert "7 cookie" not in detail
+
+
+class TestSaveStateDoesNotClobberSharedParents:
+    """A shared parent must keep its permissions.
+
+    Flagged by two seats. `_save_state` chmod 0700 unconditionally, so pointing
+    state_path at a relative name makes the parent the current directory, and
+    the call tightens whatever that happens to be.
+    """
+
+    def test_an_existing_parent_keeps_its_mode(self, tmp_path):
+        parent = tmp_path / "shared"
+        parent.mkdir()
+        parent.chmod(0o755)
+        auth._save_state(FakeContext(), parent / "state.json")
+        assert parent.stat().st_mode & 0o777 == 0o755
+
+    def test_a_directory_we_create_is_still_owner_only(self, tmp_path):
+        target = tmp_path / "made-by-us" / "state.json"
+        auth._save_state(FakeContext(), target)
+        assert target.parent.stat().st_mode & 0o777 == 0o700
+
+
+class TestLoginAbortLeavesNothing:
+    """The login-level regression test for the bug that started this.
+
+    The rewritten permissions test exercises _save_state directly, which left
+    login()'s own wiring uncovered — raised by one seat. This covers the thing
+    that actually went wrong: the prompt raising must not touch the file.
+    """
+
+    def test_an_aborted_prompt_never_creates_the_file(self, tmp_path, monkeypatch):
+        state = tmp_path / "state.json"
+
+        class FakeBrowser:
+            def new_context(self, **kw):
+                return FakeContext()
+
+            def close(self):
+                pass
+
+        class FakePW:
+            chromium = type("C", (), {"launch": staticmethod(lambda **kw: FakeBrowser())})()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        monkeypatch.setattr("playwright.sync_api.sync_playwright", lambda: FakePW())
+        monkeypatch.setattr("webfetch.auth.guard", lambda url, allow_private=False: url)
+        monkeypatch.setattr("webfetch.auth.guarded_context", lambda ctx: None)
+        monkeypatch.setattr("builtins.input", lambda *a: (_ for _ in ()).throw(EOFError("no tty")))
+
+        with pytest.raises(EOFError):
+            auth.login("https://example.com", state_path=state)
+        assert not state.exists()

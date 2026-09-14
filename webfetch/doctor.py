@@ -94,8 +94,22 @@ def _session_state() -> tuple[str, str]:
     except json.JSONDecodeError as exc:
         return FAIL, f"{p} is unreadable as JSON ({exc.msg}) — run webfetch login again"
 
-    cookies = state.get("cookies") or []
-    origins = state.get("origins") or []
+    # Council review found the check trusting whatever parsed. A non-object
+    # payload raised AttributeError, and {"cookies": "garbage"} reported ok
+    # with "7 cookie(s)" — the length of the string. Both repeat the mistake
+    # the check exists to stop: reading a shape for a session.
+    if not isinstance(state, dict):
+        return FAIL, (
+            f"{p} is not a session object (found {type(state).__name__}) — run webfetch login again"
+        )
+    cookies = state.get("cookies", [])
+    origins = state.get("origins", [])
+    for field, value in (("cookies", cookies), ("origins", origins)):
+        if not isinstance(value, list):
+            return FAIL, (
+                f"{p} has a {field} field of type {type(value).__name__}, expected a list"
+                " — unexpected shape; run webfetch login again"
+            )
     # Some sites authenticate from localStorage rather than cookies, so either
     # alone is a session. Neither means nothing was ever captured.
     if not cookies and not origins:

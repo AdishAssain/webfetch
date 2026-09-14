@@ -93,3 +93,20 @@ def test_route_allows_public_http():
     from webfetch._browser import _route_allowed
 
     assert _route_allowed("https://1.1.1.1/page") is True
+
+
+@pytest.mark.parametrize(
+    "url", ["DATA:image/png;base64,AAA=", "Blob:https://x.com/1", "ABOUT:blank"]
+)
+def test_route_scheme_matching_is_case_insensitive(url):
+    """A scheme is case-insensitive per RFC 3986; blocking DATA: blocks nothing useful."""
+    from webfetch._browser import _route_allowed
+
+    assert _route_allowed(url) is True
+
+
+@pytest.mark.parametrize("url", ["FILE:///etc/passwd", "File:///etc/passwd"])
+def test_uppercase_file_scheme_is_still_blocked(url):
+    from webfetch._browser import _route_allowed
+
+    assert _route_allowed(url) is False

@@ -28,13 +28,21 @@ def _save_state(context, state_path: Path | str) -> Path:
     pre-creation was there for: cookies are never briefly world-readable.
     """
     state_path = Path(state_path)
-    state_path.parent.mkdir(parents=True, exist_ok=True)
-    state_path.parent.chmod(0o700)
+    parent = state_path.parent
+    # Tighten only a directory this call created. A relative state_path makes
+    # the parent the current working directory, and chmod 0700 on that would
+    # change permissions the user set for something else entirely.
+    created = not parent.exists()
+    parent.mkdir(parents=True, exist_ok=True)
+    if created:
+        parent.chmod(0o700)
 
     fd, tmp = tempfile.mkstemp(dir=state_path.parent, prefix=".storage_state.", suffix=".tmp")
     os.close(fd)
     try:
         context.storage_state(path=tmp)
+        # Not redundant with mkstemp: Playwright may replace the file rather
+        # than write into it, in which case the mode is its own, not ours.
         os.chmod(tmp, 0o600)  # session cookies — restrict to owner
         os.replace(tmp, state_path)
     except BaseException:
