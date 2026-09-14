@@ -14,6 +14,8 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync
+      # Runs over every tracked file, so a --no-verify commit is still caught.
+      - run: git ls-files -z | xargs -0 python3 scripts/guard_public.py
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run vulture
