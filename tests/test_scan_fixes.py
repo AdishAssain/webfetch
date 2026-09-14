@@ -88,23 +88,33 @@ def test_backoff_grows_without_the_header(monkeypatch):
 # ── credential-exposure.session-file-permissions ─────────────────────────
 
 
-def test_login_creates_session_file_unreadable_by_others(tmp_path, monkeypatch):
+def test_login_writes_session_file_unreadable_by_others(tmp_path):
+    """Cookies must never be world-readable, not even during the write.
+
+    This used to be enforced by pre-creating the real path 0600 before the
+    browser launched, and the test asserted that pre-creation. The mechanism
+    was itself a bug: it opened the path O_TRUNC before the confirmation
+    prompt, so aborting a login left a 0-byte file and destroyed any session
+    already saved there.
+
+    The property is now held by writing through a 0600 temporary file and
+    renaming it into place, so the assertion is on the mode Playwright is
+    handed rather than on the file existing early.
+    """
     state = tmp_path / "nested" / "state.json"
+    handed = {}
 
-    def fake_sync_playwright():
-        # The file must already be 0600 by the time Playwright would write it.
-        assert state.exists(), "session file should be pre-created"
-        assert stat.S_IMODE(state.stat().st_mode) == 0o600
-        raise RuntimeError("stop before launching a browser")
+    class Context:
+        def storage_state(self, path):
+            handed["mode"] = stat.S_IMODE(os.stat(path).st_mode)
+            with open(path, "w") as fh:
+                fh.write('{"cookies": [], "origins": [{"origin": "https://example.com"}]}')
 
-    monkeypatch.setattr("playwright.sync_api.sync_playwright", fake_sync_playwright)
-    monkeypatch.setattr("webfetch.auth.guard", lambda url, allow_private=False: url)
+    from webfetch.auth import _save_state
 
-    from webfetch.auth import login
+    _save_state(Context(), state)
 
-    with pytest.raises(RuntimeError, match="stop before launching"):
-        login("https://example.com", state_path=state)
-
+    assert handed["mode"] == 0o600, "playwright was handed a world-readable file"
     assert stat.S_IMODE(state.stat().st_mode) == 0o600
     assert stat.S_IMODE(state.parent.stat().st_mode) == 0o700
     assert not os.access(state, os.X_OK)

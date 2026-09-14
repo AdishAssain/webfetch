@@ -72,13 +72,35 @@ def _cache_dir() -> tuple[str, str]:
 
 
 def _session_state() -> tuple[str, str]:
+    """A session file has to hold a session, not merely exist.
+
+    This checked presence and mode only. An aborted `webfetch login` leaves a
+    0-byte file behind, and the check reported ok on it: green, while every
+    auth fetch would still 401. A check that cannot fail for the reason it
+    exists is worse than no check, because it gets believed.
+    """
     p = config.STATE_PATH
     if not p.exists():
         return WARN, f"no saved session at {p} — auth fetches and x.com return 401"
     mode = p.stat().st_mode & 0o777
     if mode != 0o600:
         return FAIL, f"{p} mode is {mode:o}, expected 600 — session cookies are readable"
-    return OK, f"{p} present, mode 600"
+
+    raw = p.read_text(errors="replace")
+    if not raw.strip():
+        return WARN, f"{p} is empty — an aborted login leaves this; run webfetch login again"
+    try:
+        state = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return FAIL, f"{p} is unreadable as JSON ({exc.msg}) — run webfetch login again"
+
+    cookies = state.get("cookies") or []
+    origins = state.get("origins") or []
+    # Some sites authenticate from localStorage rather than cookies, so either
+    # alone is a session. Neither means nothing was ever captured.
+    if not cookies and not origins:
+        return WARN, f"{p} holds no cookies and no origins — empty session"
+    return OK, f"{p} present, mode 600, {len(cookies)} cookie(s), {len(origins)} origin(s)"
 
 
 def _search_provider() -> tuple[str, str]:
