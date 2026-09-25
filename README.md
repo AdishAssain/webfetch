@@ -126,6 +126,10 @@ time to load a particular element. A wait forces Playwright rendering, including
 when Firecrawl is configured. Waiting does not guarantee a site's challenge will
 complete or that access will be granted.
 
+`webfetch get` prints the first 2000 characters of a page, or the first five
+rows when the page holds a table. Add `--full` to print the whole page text, for
+example when a script diffs it or saves it.
+
 `download()` streams through HTTP only. It does not use Playwright or saved login
 sessions. It requires a complete HTTP 200 response; 202, 204, and partial 206
 responses are rejected without replacing the destination. On 401/403 its exception

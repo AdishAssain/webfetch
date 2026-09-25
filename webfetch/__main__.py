@@ -19,6 +19,9 @@ def main() -> None:
     get.add_argument(
         "--archive", action="store_true", help="fall back to an existing Wayback snapshot"
     )
+    get.add_argument(
+        "--full", action="store_true", help="print the whole page, not the first 2000 chars"
+    )
 
     dis = sub.add_parser("discover", help="search for candidate URLs")
     dis.add_argument("query")
@@ -46,10 +49,14 @@ def main() -> None:
             print(f"fallback: {r.fallback_reason}", file=sys.stderr)
         if r.archive_url:
             print(f"archived: {r.archive_timestamp} {r.archive_url}", file=sys.stderr)
-        if r.dataframe is not None:
+        body = r.text or r.markdown or ""
+        if args.full:
+            # A page with a table still prints its text; a data file has none.
+            print(body if body or r.dataframe is None else r.dataframe.to_csv(index=False))
+        elif r.dataframe is not None:
             print(r.dataframe.head())
         else:
-            print((r.text or r.markdown)[:2000])
+            print(body[:2000])
         if r.error or r.status >= 400:
             print(f"error: {r.error or f'HTTP {r.status}'}", file=sys.stderr)
             sys.exit(1)

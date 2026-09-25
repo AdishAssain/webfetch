@@ -271,6 +271,30 @@ def test_cli_forwards_wait_and_refresh(monkeypatch):
     assert calls[0]["refresh"] is True
 
 
+@pytest.mark.parametrize("flags,expected", [([], 2000), (["--full"], 5000)])
+def test_cli_get_truncates_unless_full(monkeypatch, capsys, flags, expected):
+    from webfetch import __main__ as cli
+
+    monkeypatch.setattr(cli, "fetch", lambda *a, **k: client.Result(url=URL, text="x" * 5000))
+    monkeypatch.setattr("sys.argv", ["webfetch", "get", URL, *flags])
+    cli.main()
+    body = capsys.readouterr().out.splitlines()[1]
+    assert len(body) == expected
+
+
+def test_cli_get_full_prints_page_text_not_table_preview(monkeypatch, capsys):
+    import pandas as pd
+
+    from webfetch import __main__ as cli
+
+    page = client.Result(url=URL, text="release notes " * 400)
+    page.dataframe = pd.DataFrame({"tier": range(10)})
+    monkeypatch.setattr(cli, "fetch", lambda *a, **k: page)
+    monkeypatch.setattr("sys.argv", ["webfetch", "get", URL, "--full"])
+    cli.main()
+    assert "release notes " * 400 in capsys.readouterr().out
+
+
 def test_markdown_only_firecrawl_success_is_not_lost_in_html_cache(monkeypatch, fetch_env):
     monkeypatch.setattr(client, "ENGINE", "firecrawl")
     monkeypatch.setattr(client, "FIRECRAWL_API_KEY", "test-key")
